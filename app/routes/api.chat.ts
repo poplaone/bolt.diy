@@ -13,6 +13,7 @@ import { createSummary } from '~/lib/.server/llm/create-summary';
 import { extractPropertiesFromMessage } from '~/lib/.server/llm/utils';
 import type { DesignScheme } from '~/types/design-scheme';
 import { MCPService } from '~/lib/services/mcpService';
+import { StreamRecoveryManager } from '~/lib/.server/llm/stream-recovery';
 
 export async function action(args: ActionFunctionArgs) {
   return chatAction(args);
@@ -39,6 +40,14 @@ function parseCookies(cookieHeader: string): Record<string, string> {
 }
 
 async function chatAction({ context, request }: ActionFunctionArgs) {
+  const streamRecovery = new StreamRecoveryManager({
+    timeout: 45000,
+    maxRetries: 2,
+    onTimeout: () => {
+      logger.warn('Stream timeout - attempting recovery');
+    },
+  });
+
   const { messages, files, promptId, contextOptimization, supabase, chatMode, designScheme, maxLLMSteps } =
     await request.json<{
       messages: Messages;
@@ -83,6 +92,8 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
 
     const dataStream = createDataStream({
       async execute(dataStream) {
+        streamRecovery.startMonitoring();
+
         const filePaths = getFilePaths(files || {});
         let filteredFiles: FileMap | undefined = undefined;
         let summary: string | undefined = undefined;
@@ -314,17 +325,61 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
 
         (async () => {
           for await (const part of result.fullStream) {
+            streamRecovery.updateActivity();
+
             if (part.type === 'error') {
               const error: any = part.error;
-              logger.error(`${error}`);
+              logger.error('Streaming error:', error);
+              streamRecovery.stop();
+
+              // Enhanced error handling for common streaming issues
+              if (error.message?.includes('Invalid JSON response')) {
+                logger.error('Invalid JSON response detected - likely malformed API response');
+              } else if (error.message?.includes('token')) {
+                logger.error('Token-related error detected - possible token limit exceeded');
+              }
 
               return;
             }
           }
+          streamRecovery.stop();
         })();
         result.mergeIntoDataStream(dataStream);
       },
-      onError: (error: any) => `Custom error: ${error.message}`,
+      onError: (error: any) => {
+        // Provide more specific error messages for common issues
+        const errorMessage = error.message || 'Unknown error';
+
+        if (errorMessage.includes('model') && errorMessage.includes('not found')) {
+          return 'Custom error: Invalid model selected. Please check that the model name is correct and available.';
+        }
+
+        if (errorMessage.includes('Invalid JSON response')) {
+          return 'Custom error: The AI service returned an invalid response. This may be due to an invalid model name, API rate limiting, or server issues. Try selecting a different model or check your API key.';
+        }
+
+        if (
+          errorMessage.includes('API key') ||
+          errorMessage.includes('unauthorized') ||
+          errorMessage.includes('authentication')
+        ) {
+          return 'Custom error: Invalid or missing API key. Please check your API key configuration.';
+        }
+
+        if (errorMessage.includes('token') && errorMessage.includes('limit')) {
+          return 'Custom error: Token limit exceeded. The conversation is too long for the selected model. Try using a model with larger context window or start a new conversation.';
+        }
+
+        if (errorMessage.includes('rate limit') || errorMessage.includes('429')) {
+          return 'Custom error: API rate limit exceeded. Please wait a moment before trying again.';
+        }
+
+        if (errorMessage.includes('network') || errorMessage.includes('timeout')) {
+          return 'Custom error: Network error. Please check your internet connection and try again.';
+        }
+
+        return `Custom error: ${errorMessage}`;
+      },
     }).pipeThrough(
       new TransformStream({
         transform: (chunk, controller) => {

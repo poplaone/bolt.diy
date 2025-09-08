@@ -21,9 +21,12 @@ import NotificationsTab from '~/components/@settings/tabs/notifications/Notifica
 import FeaturesTab from '~/components/@settings/tabs/features/FeaturesTab';
 import { DataTab } from '~/components/@settings/tabs/data/DataTab';
 import { EventLogsTab } from '~/components/@settings/tabs/event-logs/EventLogsTab';
-import ConnectionsTab from '~/components/@settings/tabs/connections/ConnectionsTab';
+import GitHubTab from '~/components/@settings/tabs/github/GitHubTab';
+import GitLabTab from '~/components/@settings/tabs/gitlab/GitLabTab';
+import SupabaseTab from '~/components/@settings/tabs/supabase/SupabaseTab';
+import VercelTab from '~/components/@settings/tabs/vercel/VercelTab';
+import NetlifyTab from '~/components/@settings/tabs/netlify/NetlifyTab';
 import CloudProvidersTab from '~/components/@settings/tabs/providers/cloud/CloudProvidersTab';
-import ServiceStatusTab from '~/components/@settings/tabs/providers/status/ServiceStatusTab';
 import LocalProvidersTab from '~/components/@settings/tabs/providers/local/LocalProvidersTab';
 import McpTab from '~/components/@settings/tabs/mcp/McpTab';
 
@@ -33,7 +36,7 @@ interface ControlPanelProps {
 }
 
 // Beta status for experimental features
-const BETA_TABS = new Set<TabType>(['service-status', 'local-providers', 'mcp']);
+const BETA_TABS = new Set<TabType>(['local-providers', 'mcp']);
 
 const BetaLabel = () => (
   <div className="absolute top-2 right-2 px-1.5 py-0.5 rounded-full bg-purple-500/10 dark:bg-purple-500/20">
@@ -134,14 +137,21 @@ export const ControlPanel = ({ open, onClose }: ControlPanelProps) => {
         return <CloudProvidersTab />;
       case 'local-providers':
         return <LocalProvidersTab />;
-      case 'connection':
-        return <ConnectionsTab />;
+      case 'github':
+        return <GitHubTab />;
+      case 'gitlab':
+        return <GitLabTab />;
+      case 'supabase':
+        return <SupabaseTab />;
+      case 'vercel':
+        return <VercelTab />;
+      case 'netlify':
+        return <NetlifyTab />;
       case 'event-logs':
         return <EventLogsTab />;
-      case 'service-status':
-        return <ServiceStatusTab />;
       case 'mcp':
         return <McpTab />;
+
       default:
         return null;
     }
@@ -153,7 +163,11 @@ export const ControlPanel = ({ open, onClose }: ControlPanelProps) => {
         return hasNewFeatures;
       case 'notifications':
         return hasUnreadNotifications;
-      case 'connection':
+      case 'github':
+      case 'gitlab':
+      case 'supabase':
+      case 'vercel':
+      case 'netlify':
         return hasConnectionIssues;
       default:
         return false;
@@ -166,7 +180,11 @@ export const ControlPanel = ({ open, onClose }: ControlPanelProps) => {
         return `${unviewedFeatures.length} new feature${unviewedFeatures.length === 1 ? '' : 's'} to explore`;
       case 'notifications':
         return `${unreadNotifications.length} unread notification${unreadNotifications.length === 1 ? '' : 's'}`;
-      case 'connection':
+      case 'github':
+      case 'gitlab':
+      case 'supabase':
+      case 'vercel':
+      case 'netlify':
         return currentIssue === 'disconnected'
           ? 'Connection lost'
           : currentIssue === 'high-latency'
@@ -190,7 +208,11 @@ export const ControlPanel = ({ open, onClose }: ControlPanelProps) => {
       case 'notifications':
         markAllAsRead();
         break;
-      case 'connection':
+      case 'github':
+      case 'gitlab':
+      case 'supabase':
+      case 'vercel':
+      case 'netlify':
         acknowledgeIssue();
         break;
     }
